@@ -14,7 +14,7 @@ const OPPOSITE = { left: 'right', right: 'left', up: 'down', down: 'up' };
 const GHOST_DIR_ORDER = [ 'up', 'left', 'down', 'right' ];
 
 const PACMAN_SPEED = 0.125; // 1/8 celda/frame -> alinea cada 8 frames
-const GHOST_SPEED = 0.1;    // 1/10 celda/frame
+const GHOST_SPEED = 0.05;   // 1/20 celda/frame -> alinea cada 20 frames
 
 // Crea una partida nueva. Copia MAZE (pristino) a game.grid para poder comer
 // dots sin destruir el original, y reiniciar.
