@@ -136,16 +136,16 @@ function ghostTarget( game, g ) {
   }
 
   if ( g.kind === 'flanker' ) {
-    // Espeja la posicion del chaser respecto a un pivote 2 celdas delante de
-    // Pac-Man; sin chaser, persigue a Pac-Man.
-    const chaser = game.ghosts.find( ( other ) => other.kind === 'chaser' );
-    if ( !chaser ) return pac;
+    // Formula clasica de Inky: espeja la celda del emboscador respecto a un
+    // pivote 2 celdas por delante de Pac-Man. Sin ambusador, persigue a Pac-Man.
+    const ambusher = game.ghosts.find( ( other ) => other.kind === 'ambusher' );
+    if ( !ambusher ) return pac;
     const d = DIRS[ p.dir ] || { x: 0, y: 0 };
     const pivot = clampToGrid( pac.x + d.x * 2, pac.y + d.y * 2, grid );
-    const chaserCell = clampToGrid( chaser.x, chaser.y, grid );
+    const ambusherCell = clampToGrid( ambusher.x, ambusher.y, grid );
     return clampToGrid(
-      2 * pivot.x - chaserCell.x,
-      2 * pivot.y - chaserCell.y,
+      2 * pivot.x - ambusherCell.x,
+      2 * pivot.y - ambusherCell.y,
       grid
     );
   }
