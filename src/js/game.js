@@ -9,6 +9,9 @@ const DIRS = {
   down: { x: 0, y: 1 },
 };
 const OPPOSITE = { left: 'right', right: 'left', up: 'down', down: 'up' };
+// Orden fijo de desempate: si dos direcciones empatan en distancia, gana la
+// primera de esta lista.
+const GHOST_DIR_ORDER = [ 'up', 'left', 'down', 'right' ];
 
 const PACMAN_SPEED = 0.125; // 1/8 celda/frame -> alinea cada 8 frames
 const GHOST_SPEED = 0.1;    // 1/10 celda/frame
@@ -110,35 +113,75 @@ function movePacman( game ) {
   wrapTunnel( p, width );
 }
 
-function decideGhost( game, g ) {
+// Recorta una celda a los limites del grid.
+function clampToGrid( x, y, grid ) {
+  return {
+    x: Math.max( 0, Math.min( grid[ 0 ].length - 1, Math.round( x ) ) ),
+    y: Math.max( 0, Math.min( grid.length - 1, Math.round( y ) ) ),
+  };
+}
+
+// Celda objetivo de un fantasma segun su personalidad. `chaser` (y cualquier
+// kind desconocido) apunta directamente a Pac-Man.
+function ghostTarget( game, g ) {
   const grid = game.grid;
   const p = game.pacman;
+  const pac = { x: Math.round( p.x ), y: Math.round( p.y ) };
 
-  const options = Object.keys( DIRS ).filter(
+  if ( g.kind === 'ambusher' ) {
+    // 4 celdas por delante de Pac-Man; si caen en pared, apunta a Pac-Man.
+    const d = DIRS[ p.dir ] || { x: 0, y: 0 };
+    const target = clampToGrid( pac.x + d.x * 4, pac.y + d.y * 4, grid );
+    if ( isWall( grid, target.x, target.y, 'ghost' ) ) return pac;
+    return target;
+  }
+
+  if ( g.kind === 'flanker' ) {
+    // Espeja la posicion del chaser respecto a un pivote 2 celdas delante de
+    // Pac-Man; sin chaser, persigue a Pac-Man.
+    const chaser = game.ghosts.find( ( other ) => other.kind === 'chaser' );
+    if ( !chaser ) return pac;
+    const d = DIRS[ p.dir ] || { x: 0, y: 0 };
+    const pivot = clampToGrid( pac.x + d.x * 2, pac.y + d.y * 2, grid );
+    const chaserCell = clampToGrid( chaser.x, chaser.y, grid );
+    return clampToGrid(
+      2 * pivot.x - chaserCell.x,
+      2 * pivot.y - chaserCell.y,
+      grid
+    );
+  }
+
+  if ( g.kind === 'shy' ) {
+    // Persigue de lejos; a menos de 8 celdas huye a la esquina inferior izquierda.
+    const dist =
+      Math.abs( Math.round( g.x ) - pac.x ) + Math.abs( Math.round( g.y ) - pac.y );
+    return dist < 8 ? { x: 1, y: 29 } : pac;
+  }
+
+  return pac;
+}
+
+// Elige la direccion en el cruce que mas acerque (Manhattan) a target.
+function chooseGhostDir( grid, g, target ) {
+  const options = GHOST_DIR_ORDER.filter(
     ( dir ) => dir !== OPPOSITE[ g.dir ] && canMove( grid, g.x, g.y, dir, 'ghost' )
   );
   // Sin salida (callejon): permitir el giro de 180.
-  const choices = options.length ? options : [ '' + OPPOSITE[ g.dir ] ];
+  const choices = options.length ? options : [ OPPOSITE[ g.dir ] ];
 
-  if ( g.kind === 'hunter' ) {
-    const px = Math.round( p.x );
-    const py = Math.round( p.y );
-    let best = choices[ 0 ];
-    let bestDist = Infinity;
-    for ( const dir of choices ) {
-      const d = DIRS[ dir ];
-      const nx = g.x + d.x;
-      const ny = g.y + d.y;
-      const dist = Math.abs( nx - px ) + Math.abs( ny - py );
-      if ( dist < bestDist ) {
-        bestDist = dist;
-        best = dir;
-      }
+  let best = choices[ 0 ];
+  let bestDist = Infinity;
+  for ( const dir of choices ) {
+    const d = DIRS[ dir ];
+    const nx = g.x + d.x;
+    const ny = g.y + d.y;
+    const dist = Math.abs( nx - target.x ) + Math.abs( ny - target.y );
+    if ( dist < bestDist ) {
+      bestDist = dist;
+      best = dir;
     }
-    g.dir = best;
-  } else {
-    g.dir = choices[ Math.floor( Math.random() * choices.length ) ];
   }
+  g.dir = best;
 }
 
 function moveGhost( game, g ) {
@@ -148,7 +191,12 @@ function moveGhost( game, g ) {
   if ( aligned( g.x ) && aligned( g.y ) ) {
     g.x = Math.round( g.x );
     g.y = Math.round( g.y );
-    decideGhost( game, g );
+    if ( g.y > PEN_EXIT_ROW ) {
+      // Dentro de la pen: salida forzada hacia arriba, sin decision codiciosa.
+      g.dir = 'up';
+    } else {
+      chooseGhostDir( grid, g, ghostTarget( game, g ) );
+    }
     if ( !canMove( grid, g.x, g.y, g.dir, 'ghost' ) ) return;
   }
 
