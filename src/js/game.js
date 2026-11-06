@@ -121,8 +121,8 @@ function clampToGrid( x, y, grid ) {
   };
 }
 
-// Celda objetivo de un fantasma segun su personalidad. Los kinds que aun no
-// tienen comportamiento propio apuntan a Pac-Man.
+// Celda objetivo de un fantasma segun su personalidad. `chaser` (y cualquier
+// kind desconocido) apunta directamente a Pac-Man.
 function ghostTarget( game, g ) {
   const grid = game.grid;
   const p = game.pacman;
@@ -149,6 +149,13 @@ function ghostTarget( game, g ) {
       2 * pivot.y - chaserCell.y,
       grid
     );
+  }
+
+  if ( g.kind === 'shy' ) {
+    // Persigue de lejos; a menos de 8 celdas huye a la esquina inferior izquierda.
+    const dist =
+      Math.abs( Math.round( g.x ) - pac.x ) + Math.abs( Math.round( g.y ) - pac.y );
+    return dist < 8 ? { x: 1, y: 29 } : pac;
   }
 
   return pac;
