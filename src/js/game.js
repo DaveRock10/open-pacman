@@ -136,6 +136,21 @@ function ghostTarget( game, g ) {
     return target;
   }
 
+  if ( g.kind === 'flanker' ) {
+    // Espeja la posicion del chaser respecto a un pivote 2 celdas delante de
+    // Pac-Man; sin chaser, persigue a Pac-Man.
+    const chaser = game.ghosts.find( ( other ) => other.kind === 'chaser' );
+    if ( !chaser ) return pac;
+    const d = DIRS[ p.dir ] || { x: 0, y: 0 };
+    const pivot = clampToGrid( pac.x + d.x * 2, pac.y + d.y * 2, grid );
+    const chaserCell = clampToGrid( chaser.x, chaser.y, grid );
+    return clampToGrid(
+      2 * pivot.x - chaserCell.x,
+      2 * pivot.y - chaserCell.y,
+      grid
+    );
+  }
+
   return pac;
 }
 
