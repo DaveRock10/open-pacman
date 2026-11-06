@@ -9,6 +9,9 @@ const DIRS = {
   down: { x: 0, y: 1 },
 };
 const OPPOSITE = { left: 'right', right: 'left', up: 'down', down: 'up' };
+// Orden fijo de desempate: si dos direcciones empatan en distancia, gana la
+// primera de esta lista.
+const GHOST_DIR_ORDER = [ 'up', 'left', 'down', 'right' ];
 
 const PACMAN_SPEED = 0.125; // 1/8 celda/frame -> alinea cada 8 frames
 const GHOST_SPEED = 0.1;    // 1/10 celda/frame
@@ -110,35 +113,53 @@ function movePacman( game ) {
   wrapTunnel( p, width );
 }
 
-function decideGhost( game, g ) {
+// Recorta una celda a los limites del grid.
+function clampToGrid( x, y, grid ) {
+  return {
+    x: Math.max( 0, Math.min( grid[ 0 ].length - 1, Math.round( x ) ) ),
+    y: Math.max( 0, Math.min( grid.length - 1, Math.round( y ) ) ),
+  };
+}
+
+// Celda objetivo de un fantasma segun su personalidad. Los kinds que aun no
+// tienen comportamiento propio apuntan a Pac-Man.
+function ghostTarget( game, g ) {
   const grid = game.grid;
   const p = game.pacman;
+  const pac = { x: Math.round( p.x ), y: Math.round( p.y ) };
 
-  const options = Object.keys( DIRS ).filter(
+  if ( g.kind === 'ambusher' ) {
+    // 4 celdas por delante de Pac-Man; si caen en pared, apunta a Pac-Man.
+    const d = DIRS[ p.dir ] || { x: 0, y: 0 };
+    const target = clampToGrid( pac.x + d.x * 4, pac.y + d.y * 4, grid );
+    if ( isWall( grid, target.x, target.y, 'ghost' ) ) return pac;
+    return target;
+  }
+
+  return pac;
+}
+
+// Elige la direccion en el cruce que mas acerque (Manhattan) a target.
+function chooseGhostDir( grid, g, target ) {
+  const options = GHOST_DIR_ORDER.filter(
     ( dir ) => dir !== OPPOSITE[ g.dir ] && canMove( grid, g.x, g.y, dir, 'ghost' )
   );
   // Sin salida (callejon): permitir el giro de 180.
-  const choices = options.length ? options : [ '' + OPPOSITE[ g.dir ] ];
+  const choices = options.length ? options : [ OPPOSITE[ g.dir ] ];
 
-  if ( g.kind === 'hunter' ) {
-    const px = Math.round( p.x );
-    const py = Math.round( p.y );
-    let best = choices[ 0 ];
-    let bestDist = Infinity;
-    for ( const dir of choices ) {
-      const d = DIRS[ dir ];
-      const nx = g.x + d.x;
-      const ny = g.y + d.y;
-      const dist = Math.abs( nx - px ) + Math.abs( ny - py );
-      if ( dist < bestDist ) {
-        bestDist = dist;
-        best = dir;
-      }
+  let best = choices[ 0 ];
+  let bestDist = Infinity;
+  for ( const dir of choices ) {
+    const d = DIRS[ dir ];
+    const nx = g.x + d.x;
+    const ny = g.y + d.y;
+    const dist = Math.abs( nx - target.x ) + Math.abs( ny - target.y );
+    if ( dist < bestDist ) {
+      bestDist = dist;
+      best = dir;
     }
-    g.dir = best;
-  } else {
-    g.dir = choices[ Math.floor( Math.random() * choices.length ) ];
   }
+  g.dir = best;
 }
 
 function moveGhost( game, g ) {
@@ -152,7 +173,7 @@ function moveGhost( game, g ) {
       // Dentro de la pen: salida forzada hacia arriba, sin decision codiciosa.
       g.dir = 'up';
     } else {
-      decideGhost( game, g );
+      chooseGhostDir( grid, g, ghostTarget( game, g ) );
     }
     if ( !canMove( grid, g.x, g.y, g.dir, 'ghost' ) ) return;
   }
