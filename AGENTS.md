@@ -17,7 +17,7 @@ Static Pac-Man clone: vanilla JS + canvas, no dependencies, no build/test/lint t
 
 - Maze is 28x31 cells written as 31 strings of exactly 28 chars; cell codes: `0` empty, `1` wall, `2` dot, `3` ghost-pen door. Keep rows same length and vertically symmetric (see comments in `maze.js`).
 - `MAZE` is pristine. `createGame()` deep-copies it to `game.grid`; mutate only `game.grid` so restarts work. Never write into `MAZE`.
-- Actors move in continuous cell coordinates at `PACMAN_SPEED = 0.125` and `GHOST_SPEED = 0.1` cells/frame. Turns/ghost decisions happen only on whole cells via `aligned()`; these speeds were chosen to align every 8/10 frames, so changing them can break cornering and collision behavior.
+- Actors move in continuous cell coordinates at `PACMAN_SPEED = 0.125` and `GHOST_SPEED = 0.05` cells/frame. Turns/ghost decisions happen only on whole cells via `aligned()`; these speeds were chosen to align every 8/20 frames respectively, so changing them can break cornering and collision behavior.
 - Pac-Man cannot enter door cells (`3`); ghosts can. Tunnel wrapping applies only on `TUNNEL_ROW`.
 - `render.js` draws from `game.grid` (eaten dots disappear), not `MAZE`.
 
