@@ -129,11 +129,10 @@ function ghostTarget( game, g ) {
   const pac = { x: Math.round( p.x ), y: Math.round( p.y ) };
 
   if ( g.kind === 'ambusher' ) {
-    // 4 celdas por delante de Pac-Man; si caen en pared, apunta a Pac-Man.
+    // 4 celdas por delante de Pac-Man, recortadas al grid. Puede ser pared: el
+    // objetivo solo se usa para medir distancia Manhattan.
     const d = DIRS[ p.dir ] || { x: 0, y: 0 };
-    const target = clampToGrid( pac.x + d.x * 4, pac.y + d.y * 4, grid );
-    if ( isWall( grid, target.x, target.y, 'ghost' ) ) return pac;
-    return target;
+    return clampToGrid( pac.x + d.x * 4, pac.y + d.y * 4, grid );
   }
 
   if ( g.kind === 'flanker' ) {
