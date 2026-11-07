@@ -14,7 +14,7 @@ const OPPOSITE = { left: 'right', right: 'left', up: 'down', down: 'up' };
 const GHOST_DIR_ORDER = [ 'up', 'left', 'down', 'right' ];
 
 const PACMAN_SPEED = 0.125; // 1/8 celda/frame -> alinea cada 8 frames
-const GHOST_SPEED = 0.1;    // 1/10 celda/frame
+const GHOST_SPEED = 0.05;   // 1/20 celda/frame -> alinea cada 20 frames
 
 // Crea una partida nueva. Copia MAZE (pristino) a game.grid para poder comer
 // dots sin destruir el original, y reiniciar.
@@ -129,24 +129,23 @@ function ghostTarget( game, g ) {
   const pac = { x: Math.round( p.x ), y: Math.round( p.y ) };
 
   if ( g.kind === 'ambusher' ) {
-    // 4 celdas por delante de Pac-Man; si caen en pared, apunta a Pac-Man.
+    // 4 celdas por delante de Pac-Man, recortadas al grid. Puede ser pared: el
+    // objetivo solo se usa para medir distancia Manhattan.
     const d = DIRS[ p.dir ] || { x: 0, y: 0 };
-    const target = clampToGrid( pac.x + d.x * 4, pac.y + d.y * 4, grid );
-    if ( isWall( grid, target.x, target.y, 'ghost' ) ) return pac;
-    return target;
+    return clampToGrid( pac.x + d.x * 4, pac.y + d.y * 4, grid );
   }
 
   if ( g.kind === 'flanker' ) {
-    // Espeja la posicion del chaser respecto a un pivote 2 celdas delante de
-    // Pac-Man; sin chaser, persigue a Pac-Man.
-    const chaser = game.ghosts.find( ( other ) => other.kind === 'chaser' );
-    if ( !chaser ) return pac;
+    // Formula clasica de Inky: espeja la celda del emboscador respecto a un
+    // pivote 2 celdas por delante de Pac-Man. Sin ambusador, persigue a Pac-Man.
+    const ambusher = game.ghosts.find( ( other ) => other.kind === 'ambusher' );
+    if ( !ambusher ) return pac;
     const d = DIRS[ p.dir ] || { x: 0, y: 0 };
     const pivot = clampToGrid( pac.x + d.x * 2, pac.y + d.y * 2, grid );
-    const chaserCell = clampToGrid( chaser.x, chaser.y, grid );
+    const ambusherCell = clampToGrid( ambusher.x, ambusher.y, grid );
     return clampToGrid(
-      2 * pivot.x - chaserCell.x,
-      2 * pivot.y - chaserCell.y,
+      2 * pivot.x - ambusherCell.x,
+      2 * pivot.y - ambusherCell.y,
       grid
     );
   }
