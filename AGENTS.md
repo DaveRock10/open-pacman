@@ -15,9 +15,9 @@ Static Pac-Man clone: vanilla JS + canvas, no dependencies, no build/test/lint t
 
 ## Maze and movement model
 
-- Maze is 28x31 cells written as 31 strings of exactly 28 chars; cell codes: `0` empty, `1` wall, `2` dot, `3` ghost-pen door. Keep rows same length and vertically symmetric (see comments in `maze.js`).
+- Maze is 28x31 cells written as 31 strings of exactly 28 chars; cell codes: `0` empty, `1` wall, `2` dot, `3` ghost-pen door, `4` power pellet. Keep rows same length and vertically symmetric (see comments in `maze.js`).
 - `MAZE` is pristine. `createGame()` deep-copies it to `game.grid`; mutate only `game.grid` so restarts work. Never write into `MAZE`.
-- Actors move in continuous cell coordinates at `PACMAN_SPEED = 0.125` and `GHOST_SPEED = 0.05` cells/frame. Turns/ghost decisions happen only on whole cells via `aligned()`; these speeds were chosen to align every 8/20 frames respectively, so changing them can break cornering and collision behavior.
+- Actors move in continuous cell coordinates at `PACMAN_SPEED = 0.125`, `GHOST_SPEED = 0.05`, `FRIGHT_SPEED = 0.025` and `EYES_SPEED = 0.1` cells/frame. Turns/ghost decisions happen only on whole cells via `aligned()`; these speeds were chosen to align every 8/20/40/10 frames respectively, so changing them can break cornering and collision behavior. Frightened ghosts use `FRIGHT_SPEED`; eaten ghosts (eyes) use `EYES_SPEED` to return to the pen.
 - Pac-Man cannot enter door cells (`3`); ghosts can. Tunnel wrapping applies only on `TUNNEL_ROW`.
 - `render.js` draws from `game.grid` (eaten dots disappear), not `MAZE`.
 
