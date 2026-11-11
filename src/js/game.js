@@ -15,6 +15,10 @@ const GHOST_DIR_ORDER = [ 'up', 'left', 'down', 'right' ];
 
 const PACMAN_SPEED = 0.125; // 1/8 celda/frame -> alinea cada 8 frames
 const GHOST_SPEED = 0.05;   // 1/20 celda/frame -> alinea cada 20 frames
+const FRIGHT_FRAMES = 360;  // 6 s a 60 fps
+const FRIGHT_SPEED = 0.025; // 1/40 celda/frame -> alinea cada 40 frames
+const EYES_SPEED = 0.1;     // 1/10 celda/frame -> alinea cada 10 frames
+const GHOST_POINTS = [ 200, 400, 800, 1600 ];
 
 // Crea una partida nueva. Copia MAZE (pristino) a game.grid para poder comer
 // dots sin destruir el original, y reiniciar.
@@ -24,7 +28,7 @@ function createGame() {
   grid[ PACMAN_START.y ][ PACMAN_START.x ] = 0;
 
   let dots = 0;
-  for ( const row of grid ) for ( const v of row ) if ( v === 2 ) dots++;
+  for ( const row of grid ) for ( const v of row ) if ( v === 2 || v === 4 ) dots++;
 
   return {
     state: 'start',
@@ -32,6 +36,10 @@ function createGame() {
     lives: 3,
     dotsRemaining: dots,
     grid,
+    frightFrames: 0, // frames restantes del efecto; > 0 = fantasmas asustados
+    eatChain: 0,     // fantasmas comidos con el pellet actual (indice en GHOST_POINTS)
+    freezeFrames: 0, // pausa al comer un fantasma
+    popups: [],      // { x, y, text } puntos mostrados durante la pausa
     pacman: {
       x: PACMAN_START.x,
       y: PACMAN_START.y,
@@ -45,6 +53,7 @@ function createGame() {
       dir: 'up',
       speed: GHOST_SPEED,
       kind: g.kind,
+      mode: 'normal', // 'normal' | 'eyes' | 'revived'
     } ) ),
   };
 }
@@ -97,11 +106,22 @@ function movePacman( game ) {
       p.dir = p.nextDir;
       p.nextDir = null;
     }
-    // Comer dot.
-    if ( grid[ p.y ][ p.x ] === 2 ) {
+    // Comer dot o power pellet.
+    const cell = grid[ p.y ][ p.x ];
+    if ( cell === 2 || cell === 4 ) {
       grid[ p.y ][ p.x ] = 0;
-      game.score += 10;
+      game.score += cell === 4 ? 50 : 10;
       game.dotsRemaining--;
+      // Power pellet: reinicia el susto y la cadena, e invierte a los fantasmas.
+      if ( cell === 4 ) {
+        game.frightFrames = FRIGHT_FRAMES;
+        game.eatChain = 0;
+        for ( const g of game.ghosts ) {
+          // Un nuevo pellet vuelve a asustar tambien a los revividos.
+          if ( g.mode === 'revived' ) g.mode = 'normal';
+          if ( g.mode === 'normal' ) g.dir = OPPOSITE[ g.dir ];
+        }
+      }
     }
     // Si no puede seguir, se detiene en la celda.
     if ( !canMove( grid, p.x, p.y, p.dir, 'pacman' ) ) return;
@@ -161,9 +181,11 @@ function ghostTarget( game, g ) {
 }
 
 // Elige la direccion en el cruce que mas acerque (Manhattan) a target.
-function chooseGhostDir( grid, g, target ) {
+function chooseGhostDir( grid, g, target, allowReverse ) {
   const options = GHOST_DIR_ORDER.filter(
-    ( dir ) => dir !== OPPOSITE[ g.dir ] && canMove( grid, g.x, g.y, dir, 'ghost' )
+    ( dir ) =>
+      ( allowReverse || dir !== OPPOSITE[ g.dir ] ) &&
+      canMove( grid, g.x, g.y, dir, 'ghost' )
   );
   // Sin salida (callejon): permitir el giro de 180.
   const choices = options.length ? options : [ OPPOSITE[ g.dir ] ];
@@ -183,6 +205,20 @@ function chooseGhostDir( grid, g, target ) {
   g.dir = best;
 }
 
+// Direccion aleatoria entre las validas, sin reversa salvo en callejon.
+function chooseFrightenedDir( grid, g ) {
+  const options = GHOST_DIR_ORDER.filter(
+    ( dir ) => dir !== OPPOSITE[ g.dir ] && canMove( grid, g.x, g.y, dir, 'ghost' )
+  );
+  const choices = options.length ? options : [ OPPOSITE[ g.dir ] ];
+  g.dir = choices[ Math.floor( Math.random() * choices.length ) ];
+}
+
+// Celda de salida propia de cada fantasma (se identifica por su kind).
+function ghostHome( g ) {
+  return GHOST_STARTS.find( ( s ) => s.kind === g.kind ) || GHOST_STARTS[ 0 ];
+}
+
 function moveGhost( game, g ) {
   const grid = game.grid;
   const width = grid[ 0 ].length;
@@ -190,18 +226,40 @@ function moveGhost( game, g ) {
   if ( aligned( g.x ) && aligned( g.y ) ) {
     g.x = Math.round( g.x );
     g.y = Math.round( g.y );
-    if ( g.y > PEN_EXIT_ROW ) {
-      // Dentro de la pen: salida forzada hacia arriba, sin decision codiciosa.
-      g.dir = 'up';
-    } else {
-      chooseGhostDir( grid, g, ghostTarget( game, g ) );
+
+    if ( g.mode === 'eyes' ) {
+      const home = ghostHome( g );
+      if ( g.x === home.x && g.y === home.y ) {
+        // Revive normal aunque el efecto siga activo.
+        g.mode = game.frightFrames > 0 ? 'revived' : 'normal';
+        g.dir = 'up';
+      } else {
+        // Los ojos pueden revertir para encontrar el camino a la pen.
+        chooseGhostDir( grid, g, home, true );
+      }
     }
+
+    if ( g.mode !== 'eyes' ) {
+      if ( g.y > PEN_EXIT_ROW ) {
+        // Dentro de la pen: salida forzada hacia arriba, sin decision codiciosa.
+        g.dir = 'up';
+      } else if ( game.frightFrames > 0 && g.mode === 'normal' ) {
+        chooseFrightenedDir( grid, g );
+      } else {
+        chooseGhostDir( grid, g, ghostTarget( game, g ) );
+      }
+    }
+
     if ( !canMove( grid, g.x, g.y, g.dir, 'ghost' ) ) return;
   }
 
   const d = DIRS[ g.dir ];
-  g.x += d.x * g.speed;
-  g.y += d.y * g.speed;
+  let speed = g.speed;
+  if ( g.mode === 'eyes' ) speed = EYES_SPEED;
+  else if ( game.frightFrames > 0 && g.mode === 'normal' ) speed = FRIGHT_SPEED;
+
+  g.x += d.x * speed;
+  g.y += d.y * speed;
   wrapTunnel( g, width );
 }
 
@@ -211,10 +269,15 @@ function resetPositions( game ) {
   p.y = PACMAN_START.y;
   p.dir = 'left';
   p.nextDir = null;
+  game.frightFrames = 0;
+  game.eatChain = 0;
+  game.freezeFrames = 0;
+  game.popups = [];
   game.ghosts.forEach( ( g, i ) => {
     g.x = GHOST_STARTS[ i ].x;
     g.y = GHOST_STARTS[ i ].y;
     g.dir = 'up';
+    g.mode = 'normal';
   } );
 }
 
@@ -223,11 +286,32 @@ function collides( a, b ) {
 }
 
 function update( game ) {
+  // Pausa al comer un fantasma: solo corre el temporizador de la pausa.
+  if ( game.freezeFrames > 0 ) {
+    game.freezeFrames--;
+    if ( game.freezeFrames === 0 ) game.popups = [];
+    return;
+  }
+
   movePacman( game );
   game.ghosts.forEach( ( g ) => moveGhost( game, g ) );
 
   for ( const g of game.ghosts ) {
-    if ( collides( game.pacman, g ) ) {
+    if ( g.mode === 'eyes' ) continue; // los ojos atraviesan a Pac-Man
+    if ( !collides( game.pacman, g ) ) continue;
+
+    if ( game.frightFrames > 0 && g.mode === 'normal' ) {
+      // Fantasma asustado: se come y pasa a ojos.
+      const points = GHOST_POINTS[ game.eatChain ];
+      game.score += points;
+      game.eatChain++;
+      g.mode = 'eyes';
+      // Reajustar a la rejilla de EYES_SPEED para no romper aligned().
+      g.x = Math.round( g.x * 10 ) / 10;
+      g.y = Math.round( g.y * 10 ) / 10;
+      game.popups.push( { x: g.x, y: g.y, text: points } );
+      game.freezeFrames += 45;
+    } else {
       game.lives--;
       if ( game.lives <= 0 ) {
         game.state = 'lost';
@@ -235,6 +319,22 @@ function update( game ) {
       }
       resetPositions( game );
       break;
+    }
+  }
+
+  if ( game.frightFrames > 0 ) {
+    game.frightFrames--;
+    if ( game.frightFrames === 0 ) {
+      // Al acabar el efecto, los revividos pasan a normales y se reajusta la
+      // posicion a la rejilla de GHOST_SPEED (el cambio de velocidad puede
+      // dejar al fantasma a mitad de celda).
+      for ( const g of game.ghosts ) {
+        if ( g.mode === 'revived' ) g.mode = 'normal';
+        if ( g.mode === 'normal' ) {
+          g.x = Math.round( g.x * 20 ) / 20;
+          g.y = Math.round( g.y * 20 ) / 20;
+        }
+      }
     }
   }
 
